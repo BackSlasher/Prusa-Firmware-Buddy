@@ -23,8 +23,10 @@
 // Layout constants for the serial printing screen
 // Note: Buttons start at Y=185, so content must end before that
 namespace {
-constexpr int16_t MARGIN_X = 30;
-constexpr int16_t COL_W = 200; // Width of each column
+constexpr int16_t MARGIN_X = HAS_MINI_DISPLAY() ? 5 : 30; // check for Mini, set margin to 5 if true, else 30
+
+// Width of each column
+constexpr int16_t COL_W = HAS_MINI_DISPLAY() ? 120 : 200;
 
 constexpr int16_t PROGRESS_BAR_Y = 50;
 constexpr int16_t PROGRESS_BAR_H = 16;
