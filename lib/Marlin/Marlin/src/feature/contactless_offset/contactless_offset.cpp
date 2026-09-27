@@ -941,11 +941,25 @@ std::expected<float, const char *> probe_sensor_z(const tool_offset::ProbingConf
     do_blocking_move_to_xy(z_probe_pos);
     do_blocking_move_to_z(z_probe_pos.z + config.safe_z_height);
 
-    const float sensor_z = measure_sensor_true_z(z_probe_pos);
-    if (std::isnan(sensor_z)) {
-        return std::unexpected("Initial probing failed, sensor Z is NaN");
+    // Local change: a picked tool can ring on its coupling and trip the loadcell in mid-air, and
+    // the probe analysis occasionally accepts such a "touch" (seen at Z 4.2 mm over a pad that
+    // sits at 0.4 mm). The coil scan then runs millimetres above the pad and fails. Reject a
+    // height that is implausible for the pad and retry after a short settle.
+    constexpr float max_deviation_mm = 1.5f;
+    constexpr uint8_t max_tries = 4;
+    for (uint8_t attempt = 1; attempt <= max_tries; ++attempt) {
+        const float sensor_z = measure_sensor_true_z(z_probe_pos);
+        if (std::isnan(sensor_z)) {
+            return std::unexpected("Initial probing failed, sensor Z is NaN");
+        }
+        if (std::abs(sensor_z - z_probe_pos.z) <= max_deviation_mm) {
+            return sensor_z;
+        }
+        SERIAL_ECHOLNPAIR("echo:sensor pad Z ", sensor_z, " implausible (expected ~", z_probe_pos.z, "), settling and retrying");
+        do_blocking_move_to_z(z_probe_pos.z + config.safe_z_height);
+        GcodeSuite::dwell(3000);
     }
-    return sensor_z;
+    return std::unexpected("Sensor Z out of range (mid-air trigger?)");
 }
 
 // The Cyphal data port that feeds a sensor channel.
