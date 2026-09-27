@@ -26,6 +26,10 @@
 #include <option/has_mmu2.h>
 #include <option/has_toolchanger.h>
 #include <option/has_indx.h>
+#include <option/has_serial_print.h>
+#if HAS_SERIAL_PRINT()
+    #include <host_dialog.hpp>
+#endif
 
 #if HAS_TOOLCHANGER()
     #include "../../module/prusa/toolchanger.h"
@@ -166,17 +170,21 @@ void GcodeSuite::M115() {
     );
 
     // EMERGENCY_PARSER (M108, M112, M410, M876)
+    // Buddy matches M108/M112/M410 (and M876, see host_dialog) in the serial reader before
+    // queueing even without Marlin's EMERGENCY_PARSER, so hosts may send them without waiting
+    // for an ok. OctoPrint only jumps its queue (needed to answer a dialog that is blocking the
+    // current command) when this capability is advertised.
     cap_line(PSTR("EMERGENCY_PARSER")
-#if ENABLED(EMERGENCY_PARSER)
-        // #error dead code found by automatic analyses (see BFW-5461)
+#if ENABLED(EMERGENCY_PARSER) || HAS_SERIAL_PRINT()
         ,
         true
 #endif
     );
 
-    // PROMPT SUPPORT (M876)
+    // PROMPT SUPPORT (M876): LCD dialogs are mirrored to the host as //action:prompt_* lines
+    // and answered with M876 S<button index> (see host_dialog.hpp)
     cap_line(PSTR("PROMPT_SUPPORT")
-#if ENABLED(HOST_PROMPT_SUPPORT)
+#if ENABLED(HOST_PROMPT_SUPPORT) || HAS_SERIAL_PRINT()
                  ,
         true
 #endif
@@ -209,6 +217,11 @@ void GcodeSuite::M115() {
         buddy::chamber().capabilities().temperature_reporting
 #endif
     );
+
+#if HAS_SERIAL_PRINT()
+    // A host sends M115 on connect; tell it about a dialog that is already open
+    host_dialog::reemit();
+#endif
 }
 
 /** @}*/

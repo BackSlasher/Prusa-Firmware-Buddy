@@ -36,6 +36,7 @@ GCodeQueue queue;
 #include <option/has_serial_print.h>
 #if HAS_SERIAL_PRINT()
     #include "serial_printing.hpp"
+    #include "host_dialog.hpp"
 #endif
 #include <gcode/inject_queue.hpp>
 #include <feature/cork/tracker.hpp>
@@ -436,6 +437,12 @@ void GCodeQueue::get_serial_commands() {
           }
           if (strcmp(command, "M112") == 0) kill(PSTR("Emergency stop (M112)"), nullptr, true);
           if (strcmp(command, "M410") == 0) quickstop_stepper();
+          #if HAS_SERIAL_PRINT()
+            // Dialog answers must work while the queue is blocked by that very dialog
+            if (host_dialog::handle_serial_line(command)) {
+              continue; // consumed, do not enqueue
+            }
+          #endif
         #endif
 
         #if defined(NO_TIMEOUTS) && NO_TIMEOUTS > 0
