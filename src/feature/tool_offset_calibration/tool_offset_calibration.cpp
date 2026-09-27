@@ -719,6 +719,21 @@ bool run(uint8_t r_param, uint8_t probe_count, Context context, const ProgressCa
                 return false;
             }
 
+            // Local change: let a freshly picked and cleaned tool settle in the coupling before the
+            // first probe. The tool has just gone from cleaning temperature down to probing
+            // temperature; on this machine the loadcell sees stick-slip transients from that for
+            // about a minute after pickup, which trip the Z probe in mid-air (retries walking down
+            // from Z 35 to the bed). A short pause takes the worst of it away.
+            if (context == Context::Print && measure_z && num_tools > 1) {
+                constexpr uint32_t settle_ms = 15000;
+                log_info(ToolOffsetCalib, "Tool %u: settling %u ms before probing", tool.to_raw(), static_cast<unsigned>(settle_ms));
+                SERIAL_ECHOLNPAIR("echo:tool offset: settle wait for tool ", tool.to_raw());
+                GcodeSuite::dwell(settle_ms);
+                if (gcode_exceptions().is_unwinding()) {
+                    return false;
+                }
+            }
+
             if (num_tools == 1 && measure_z) {
                 // With one-tool print, we still need to do prepare_tool which runs the nozzle cleaner
                 // But we don't need to do any offset calibrations, so we can just quit now
