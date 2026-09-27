@@ -41,8 +41,11 @@ using ProgressCallback = std::function<bool(const ProgressReport &)>;
 /// @param probe_count number of Z probe repetitions per point to average
 /// @param context see Context
 /// @param progress_cb optional progress reporter (called once per tool)
+/// @param tool_mask bitmask of physical tools (bit n = physical tool n) to calibrate when the
+///        print's own tool list is empty (serial/host prints have no GCodeInfo); 0 = no mask,
+///        fall back to all enabled tools as before. Disabled tools are ignored.
 /// @return true if calibration was successful
-bool run(uint8_t r_param, uint8_t probe_count, Context context = Context::Print, const ProgressCallback &progress_cb = {});
+bool run(uint8_t r_param, uint8_t probe_count, Context context = Context::Print, const ProgressCallback &progress_cb = {}, uint16_t tool_mask = 0);
 
 /// Run XY offset calibration for a single tool, without touching Z offset or other tools.
 /// @param tool The tool to calibrate

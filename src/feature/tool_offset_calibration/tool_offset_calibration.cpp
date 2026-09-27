@@ -490,7 +490,7 @@ xy_pos_t apply_stored_sensor_displacement(tool_offset::ProbingConfig &config) {
 }
 #endif
 
-bool run(uint8_t r_param, uint8_t probe_count, Context context, const ProgressCallback &progress_cb) {
+bool run(uint8_t r_param, uint8_t probe_count, Context context, const ProgressCallback &progress_cb, uint16_t tool_mask) {
     if (!is_hardware_available()) {
         bsod("Tool offset sensor requested, but not available on this printer");
     }
@@ -533,6 +533,16 @@ bool run(uint8_t r_param, uint8_t probe_count, Context context, const ProgressCa
     PhysicalToolSet used_physical_tools;
     if (context == Context::Print) {
         used_physical_tools = collect_used_physical_tools();
+    }
+    if (used_physical_tools.none() && context == Context::Print && tool_mask != 0) {
+        // Host/serial prints carry no GCodeInfo, so the file's tool list is empty; the host
+        // may name the tools it will use explicitly (G427 S<mask>) instead of getting all of them.
+        for (auto tool : PhysicalToolIndex::all().skip_all_disabled()) {
+            if (tool_mask & (1u << tool.to_raw())) {
+                used_physical_tools.set(tool.to_raw());
+            }
+        }
+        log_info(ToolOffsetCalib, "Using host-provided tool mask 0x%x", static_cast<unsigned>(tool_mask));
     }
     if (used_physical_tools.none()) {
         used_physical_tools = collect_all_enabled_tools();

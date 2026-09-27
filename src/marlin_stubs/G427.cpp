@@ -18,12 +18,15 @@
  *
  *#### Usage
  *
- *    G427 [R | P]
+ *    G427 [R | P | S]
  *
  *#### Parameters
  *
  * - `R` - millimeters of random jitter on X & Y axis during z_probing each tool <0;255>
  * - `P` - number of Z probe repetitions per point to average (default 1) <1;255>
+ * - `S` - bitmask of physical tools to calibrate (bit n = tool n) when the print has no
+ *         tool list of its own (serial/host prints); e.g. S3 = tools 0 and 1. Without it a
+ *         host print calibrates every enabled tool.
  */
 namespace PrusaGcodeSuite {
 
@@ -40,7 +43,10 @@ void G427() {
     (void)parser.store_option_if_present('P', p_param);
     p_param = std::max<uint8_t>(p_param, 1);
 
-    tool_offset_calibration::run(r_param, p_param);
+    uint16_t s_param = 0;
+    (void)parser.store_option_if_present('S', s_param);
+
+    tool_offset_calibration::run(r_param, p_param, tool_offset_calibration::Context::Print, {}, s_param);
 }
 
 } // namespace PrusaGcodeSuite

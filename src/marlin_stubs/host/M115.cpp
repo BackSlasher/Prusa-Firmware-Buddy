@@ -26,6 +26,10 @@
 #include <option/has_mmu2.h>
 #include <option/has_toolchanger.h>
 #include <option/has_indx.h>
+#include <option/has_serial_print.h>
+#if HAS_SERIAL_PRINT()
+    #include <host_dialog.hpp>
+#endif
 
 #if HAS_TOOLCHANGER()
     #include "../../module/prusa/toolchanger.h"
@@ -174,9 +178,10 @@ void GcodeSuite::M115() {
 #endif
     );
 
-    // PROMPT SUPPORT (M876)
+    // PROMPT SUPPORT (M876): LCD dialogs are mirrored to the host as //action:prompt_* lines
+    // and answered with M876 S<button index> (see host_dialog.hpp)
     cap_line(PSTR("PROMPT_SUPPORT")
-#if ENABLED(HOST_PROMPT_SUPPORT)
+#if ENABLED(HOST_PROMPT_SUPPORT) || HAS_SERIAL_PRINT()
                  ,
         true
 #endif
@@ -209,6 +214,11 @@ void GcodeSuite::M115() {
         buddy::chamber().capabilities().temperature_reporting
 #endif
     );
+
+#if HAS_SERIAL_PRINT()
+    // A host sends M115 on connect; tell it about a dialog that is already open
+    host_dialog::reemit();
+#endif
 }
 
 /** @}*/

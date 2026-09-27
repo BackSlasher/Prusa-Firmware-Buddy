@@ -56,6 +56,11 @@ GcodeSuite gcode;
 
 #include "../Marlin.h" // for idle() and suspend_auto_report
 
+#include <option/has_serial_print.h>
+#if HAS_SERIAL_PRINT()
+  #include "host_dialog.hpp"
+#endif
+
 #include "odometer.hpp"
 
 #include <option/has_tool_mapping.h>
@@ -816,6 +821,11 @@ void GcodeSuite::process_subcommands_now(char * gcode) {
   void GcodeSuite::host_keepalive() {
     // Do not log keeaplive messages, only print to serial
     SerialLoggingDisabler sld;
+
+    #if HAS_SERIAL_PRINT()
+      // Mirror LCD dialogs to the host (rate limited inside); runs on the Marlin thread only.
+      host_dialog::poll();
+    #endif
 
     const millis_t ms = millis();
     static millis_t next_busy_signal_ms = 0;

@@ -615,6 +615,7 @@ void PrusaToolChanger::commit_park(PhysicalToolIndex previous_tool) {
     head_open = true;
     loadcell.Clear();
     log_info(PrusaToolChanger, "INDX Tool #%u parked successfully", previous_tool.to_raw());
+    SERIAL_ECHOLNPAIR("echo:indx_tool parked ", previous_tool.to_raw());
     set_active_extruder(NoTool {});
     persist_last_picked_tool(NoTool {});
 }
@@ -654,6 +655,7 @@ bool PrusaToolChanger::park(PhysicalToolIndex tool) {
         // Nozzle still detected -- first retry
         if (max_retry_cnt > 0) {
             log_warning(PrusaToolChanger, "Park procedure for tool #%u failed, retrying (remaining retries: %u)", tool.to_raw(), max_retry_cnt);
+            SERIAL_ECHOLNPAIR("echo:indx_tool park_failed_retry ", tool.to_raw());
             --max_retry_cnt;
             continue;
         }
@@ -830,6 +832,7 @@ bool PrusaToolChanger::pickup(PhysicalToolIndex tool) {
         // Nozzle still detected -- first retry
         if (max_retry_cnt > 0) {
             log_warning(PrusaToolChanger, "Pickup procedure for tool #%u failed, retrying (remaining retries: %u)", tool.to_raw(), max_retry_cnt);
+            SERIAL_ECHOLNPAIR("echo:indx_tool pickup_failed_retry ", tool.to_raw());
             --max_retry_cnt;
             continue;
         }
@@ -854,6 +857,7 @@ void PrusaToolChanger::commit_pickup(PhysicalToolIndex tool, bool count_in_odome
     loadcell.Clear();
 
     log_info(PrusaToolChanger, "INDX Tool #%u picked successfully", tool.to_raw());
+    SERIAL_ECHOLNPAIR("echo:indx_tool picked ", tool.to_raw());
     if (count_in_odometer) {
         Odometer_s::instance().add_toolpick(tool);
     }

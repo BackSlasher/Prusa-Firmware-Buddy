@@ -2,6 +2,7 @@
 #include <state/printer_state.hpp>
 #include <option/developer_mode.h>
 #include <config_store/store_instance.hpp>
+#include <gcode/gcode.h>
 
 uint32_t SerialPrinting::last_serial_indicator_ms = 0;
 
@@ -28,7 +29,14 @@ void SerialPrinting::pause() {
 
 bool SerialPrinting::has_serial_timeouted() {
     auto curr_time { ticks_ms() };
-    if (GCodeQueue::has_commands_queued() || planner.processing()) {
+    // A command that is still executing without planner motion (a tool change waiting for
+    // heating or the lock, M109/M190, G4, a dialog) must keep the serial print alive too.
+    // The host (e.g. OctoPrint) sends one command at a time and waits for "ok", so during
+    // such a command the queue is empty; without this check the print was finalized and the
+    // tool parked in the middle of a serial tool change. busy_state is the same flag that
+    // drives the "echo:busy:" keepalive messages.
+    const bool command_executing = GcodeSuite::busy_state != GcodeSuite::NOT_BUSY;
+    if (GCodeQueue::has_commands_queued() || planner.processing() || command_executing) {
         // refresh timer if there are commands still processing, we want to timeout after command finishes, not after when its queued
         last_serial_indicator_ms = curr_time;
         return false;
