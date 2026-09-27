@@ -347,7 +347,11 @@ private:
 #endif
     static constexpr float thresholdStatic = -125.f;
 #if HAS_INDX()
-    static constexpr float thresholdContinuous = -50.f;
+    // Local change (was -50): a picked INDX tool rings on its coupling at ~33 Hz with 30-45 g
+    // amplitude on this machine and trips the probe in mid-air right after a hot pickup; the probe
+    // analysis still validates the shape of every touch, and a real touch at probe speed exceeds
+    // this within a millisecond, so the extra margin costs no measurable depth.
+    static constexpr float thresholdContinuous = -80.f;
 #else
     static constexpr float thresholdContinuous = -40.f;
 #endif
