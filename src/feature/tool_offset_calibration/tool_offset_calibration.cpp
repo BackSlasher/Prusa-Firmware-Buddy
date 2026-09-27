@@ -170,12 +170,18 @@ float random_jitter(uint8_t r_param) {
     return (normalized * 2.0f - 1.0f) * r_param; // [-r_param, +r_param]
 }
 
-/// Probe Z at a given XY position, averaging multiple measurements.
+/// Local change: the reference line is measured by the first tool only, and a tool ringing on
+/// its coupling can hand the loadcell analysis a "clean" touch millimetres above the bed (seen:
+/// 11.16, 2.79 and 0.07 averaged into a 4.7 mm reference, which put every other tool 3 mm off).
+/// Real touches on one spot repeat to within a few hundredths, so demand that the samples agree.
+constexpr float MAX_PROBE_SAMPLE_SPREAD = 0.2f;
+
+/// Probe Z at a given XY position, averaging multiple measurements that agree with each other.
 /// Returns NaN on failure.
 /// Asks for no tool corrections: the hotend offset and the nozzle length are what this
 /// calibration is measuring, so folding them in would make it chase its own tail.
 float probe_z_at(const xy_pos_t &pos, uint8_t probe_count) {
-    return probe_at_point(pos, PROBE_PT_NONE, 1, true, probe_count, ApplyToolCorrections::no);
+    return probe_at_point(pos, PROBE_PT_NONE, 1, true, probe_count, ApplyToolCorrections::no, MAX_PROBE_SAMPLE_SPREAD);
 }
 
 /// Park at nozzle cleaner and run the cleaning sequence.

@@ -541,6 +541,10 @@ float run_z_probe(const RunZProbeParams& params) {
     int probe_idx = 0;
     uint8_t success_count = 0;
     float z_sum = 0.0f;
+    // Local change: optional agreement check on the accepted samples, see RunZProbeParams
+    constexpr uint8_t max_kept_samples = 8;
+    float kept_samples[max_kept_samples];
+    const bool check_spread = !std::isnan(params.max_sample_spread) && params.required_successes <= max_kept_samples;
   #endif
 
   #if TOTAL_PROBING > 2 && DISABLED(NOZZLE_LOAD_CELL)
@@ -675,12 +679,31 @@ float run_z_probe(const RunZProbeParams& params) {
         auto result = loadcell.analysis.Analyse(params.check_angle_after ? *params.check_angle_after : probe_should_check_angle_after());
 
         if (result.has_value()) {
-          z_sum += result->z_coordinate;
+          const float sample_z = result->z_coordinate;
+          if (check_spread)
+            kept_samples[success_count] = sample_z;
+          z_sum += sample_z;
           success_count++;
           metric_record_custom(&analysis_result, " ok=%i,desc=\"all-good\"", true);
-          SERIAL_ECHOLNPAIR("Probe ", success_count, "/", params.required_successes, " classified as clean and OK, Z: ", result->z_coordinate);
-          if (success_count >= params.required_successes)
-            break;
+          SERIAL_ECHOLNPAIR("Probe ", success_count, "/", params.required_successes, " classified as clean and OK, Z: ", sample_z);
+          if (success_count >= params.required_successes) {
+            if (!check_spread)
+              break;
+            // The samples must agree. A mid-air trip (a picked tool ringing on its coupling)
+            // reads above the real surface, so on disagreement drop the highest and probe on.
+            uint8_t hi_idx = 0;
+            float lo_z = kept_samples[0], hi_z = kept_samples[0];
+            for (uint8_t i = 1; i < success_count; i++) {
+              if (kept_samples[i] > hi_z) { hi_z = kept_samples[i]; hi_idx = i; }
+              if (kept_samples[i] < lo_z) lo_z = kept_samples[i];
+            }
+            if (hi_z - lo_z <= params.max_sample_spread)
+              break;
+            SERIAL_ECHOLNPAIR("Probe sample Z: ", hi_z, " is ", hi_z - lo_z, " above the lowest sample, dropped as a mid-air trip");
+            z_sum -= hi_z;
+            success_count--;
+            kept_samples[hi_idx] = kept_samples[success_count];
+          }
 
         } else {
           const auto &err = result.error();
@@ -691,6 +714,8 @@ float run_z_probe(const RunZProbeParams& params) {
           SERIAL_ECHOLN(")");
 
           if (params.accept_nok_measurements && !std::isnan(err.z_coordinate)) {
+            if (check_spread)
+              kept_samples[success_count] = err.z_coordinate;
             z_sum += err.z_coordinate;
             success_count++;
             SERIAL_ECHOLNPAIR("Probe ", success_count, "/", params.required_successes, " accepted despite NOK, Z: ", err.z_coordinate);
@@ -904,7 +929,7 @@ float probe_here(float expected_trigger_z, uint8_t max_attempts, TolerateNozzleD
  *   - Raise to the BETWEEN height
  * - Return the probed Z position
  */
-float probe_at_point(const xy_pos_t &pos, const ProbePtRaise raise_after/*=PROBE_PT_NONE*/, const uint8_t verbose_level/*=0*/, const bool probe_relative/*=true*/, const uint8_t required_successes/*=1*/, const ApplyToolCorrections apply_tool_corrections/*=ApplyToolCorrections::yes*/) {
+float probe_at_point(const xy_pos_t &pos, const ProbePtRaise raise_after/*=PROBE_PT_NONE*/, const uint8_t verbose_level/*=0*/, const bool probe_relative/*=true*/, const uint8_t required_successes/*=1*/, const ApplyToolCorrections apply_tool_corrections/*=ApplyToolCorrections::yes*/, const float max_sample_spread/*=NAN*/) {
   xyz_pos_t npos = xyz_pos_t(pos);
   if (probe_relative) {
     if (!position_is_reachable_by_probe(npos.xy())) {
@@ -951,7 +976,7 @@ float probe_at_point(const xy_pos_t &pos, const ProbePtRaise raise_after/*=PROBE
 
   float measured_z = NAN;
   if (!DEPLOY_PROBE()) {
-    measured_z = run_z_probe({ .expected_trigger_z = 0.f, .required_successes = required_successes});
+    measured_z = run_z_probe({ .expected_trigger_z = 0.f, .required_successes = required_successes, .max_sample_spread = max_sample_spread });
     const float move_away_from = std::isnan(measured_z) ? current_position.z : measured_z;
 
     measured_z += probe_offset.z;

@@ -942,24 +942,39 @@ std::expected<float, const char *> probe_sensor_z(const tool_offset::ProbingConf
     do_blocking_move_to_z(z_probe_pos.z + config.safe_z_height);
 
     // Local change: a picked tool can ring on its coupling and trip the loadcell in mid-air, and
-    // the probe analysis occasionally accepts such a "touch" (seen at Z 4.2 mm over a pad that
-    // sits at 0.4 mm). The coil scan then runs millimetres above the pad and fails. Reject a
-    // height that is implausible for the pad and retry after a short settle.
+    // the probe analysis occasionally accepts such a "touch" (seen at Z 4.2, 2.8 and 2.2 mm over
+    // a pad that reads ~1.0 mm). The coil scan then runs millimetres above the pad and fails.
+    // Two guards: a gross plausibility window around the configured pad height, and then two
+    // readings that agree with each other. A phantom touch always reads above the pad, so on
+    // disagreement the lower reading is kept and the pad is probed again.
     constexpr float max_deviation_mm = 1.5f;
-    constexpr uint8_t max_tries = 4;
+    constexpr float max_spread_mm = 0.2f;
+    constexpr uint8_t max_tries = 6;
+    float lowest = NAN;
     for (uint8_t attempt = 1; attempt <= max_tries; ++attempt) {
         const float sensor_z = measure_sensor_true_z(z_probe_pos);
         if (std::isnan(sensor_z)) {
             return std::unexpected("Initial probing failed, sensor Z is NaN");
         }
-        if (std::abs(sensor_z - z_probe_pos.z) <= max_deviation_mm) {
-            return sensor_z;
+        uint32_t settle_ms = 1000;
+        if (std::abs(sensor_z - z_probe_pos.z) > max_deviation_mm) {
+            SERIAL_ECHOLNPAIR("echo:sensor pad Z ", sensor_z, " implausible (configured pad Z ", z_probe_pos.z, "), settling and retrying");
+            settle_ms = 3000;
+        } else if (std::isnan(lowest)) {
+            lowest = sensor_z;
+            SERIAL_ECHOLNPAIR("echo:sensor pad Z ", sensor_z, ", probing again to confirm");
+        } else if (std::abs(sensor_z - lowest) <= max_spread_mm) {
+            const float confirmed = (sensor_z + lowest) * 0.5f;
+            SERIAL_ECHOLNPAIR("echo:sensor pad Z ", confirmed, " confirmed by two readings");
+            return confirmed;
+        } else {
+            SERIAL_ECHOLNPAIR("echo:sensor pad Z ", sensor_z, " disagrees with ", lowest, ", keeping the lower and retrying");
+            lowest = std::min(lowest, sensor_z);
         }
-        SERIAL_ECHOLNPAIR("echo:sensor pad Z ", sensor_z, " implausible (expected ~", z_probe_pos.z, "), settling and retrying");
         do_blocking_move_to_z(z_probe_pos.z + config.safe_z_height);
-        GcodeSuite::dwell(3000);
+        GcodeSuite::dwell(settle_ms);
     }
-    return std::unexpected("Sensor Z out of range (mid-air trigger?)");
+    return std::unexpected("Sensor Z did not settle (mid-air triggers?)");
 }
 
 // The Cyphal data port that feeds a sensor channel.

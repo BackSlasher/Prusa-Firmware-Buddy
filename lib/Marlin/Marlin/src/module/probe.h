@@ -65,6 +65,11 @@
     /// Count measurements rejected by the loadcell analysis as successes,
     /// using their best-effort Z (when the analysis could compute one).
     bool accept_nok_measurements = false;
+    /// When set, the accepted samples must agree within this many mm (max - min) before they
+    /// are averaged. A wider spread means the highest sample was a mid-air trip - a phantom
+    /// touch always reads above the surface, never below - so it is dropped and probing goes
+    /// on until the required number of samples agree (bounded by TOTAL_PROBING tries).
+    float max_sample_spread = NAN;
   };
 
   float run_z_probe(const RunZProbeParams& params);
@@ -79,7 +84,8 @@
   ///               is coarse.
   /// @returns probed Z (with offsets applied), or NAN if all attempts failed.
   float probe_here(float expected_trigger_z, uint8_t max_attempts, TolerateNozzleDirt tolerate_dirt = TolerateNozzleDirt::no);
-  float probe_at_point(const xy_pos_t &pos, const ProbePtRaise raise_after=PROBE_PT_NONE, const uint8_t verbose_level=0, const bool probe_relative=true, const uint8_t required_successes=1, const ApplyToolCorrections apply_tool_corrections=ApplyToolCorrections::yes);
+  /// @param max_sample_spread  See RunZProbeParams::max_sample_spread; NAN disables the check.
+  float probe_at_point(const xy_pos_t &pos, const ProbePtRaise raise_after=PROBE_PT_NONE, const uint8_t verbose_level=0, const bool probe_relative=true, const uint8_t required_successes=1, const ApplyToolCorrections apply_tool_corrections=ApplyToolCorrections::yes, const float max_sample_spread=NAN);
   #if ENABLED(NOZZLE_LOAD_CELL) && ENABLED(PROBE_CLEANUP_SUPPORT)
     bool cleanup_probe(const xy_pos_t &rect_min, const xy_pos_t &rect_max);
   #endif
