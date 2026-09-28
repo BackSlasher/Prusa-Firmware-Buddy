@@ -332,8 +332,10 @@ namespace {
 } // namespace
 
 GcodeUpload::Result GcodeUpload::check_filename(const char *filename) const {
-    if (!filename_is_printable(filename)) {
-        return make_tuple(Status::UnsupportedMediaType, "Not a GCODE");
+    // Local change: also accept firmware (.bbf) uploads, so a build can be put on the USB
+    // media over the network and flashed with `M997 O /usb/<name>` - no stick shuffling.
+    if (!filename_is_transferrable(filename)) {
+        return make_tuple(Status::UnsupportedMediaType, "Not a GCODE or BBF");
     }
 
     // Note: If the directory we want to upload to doesn't exist,

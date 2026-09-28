@@ -10,6 +10,10 @@
 #include <optional>
 
 #include <Marlin/src/gcode/gcode.h>
+#include <loadcell.hpp>
+#include <timing.h>
+#include <algorithm>
+#include <cmath>
 #include <Marlin/src/module/motion.h>
 #include <Marlin/src/module/planner.h>
 #include <Marlin/src/module/tool_change.h>
@@ -182,6 +186,58 @@ constexpr float MAX_PROBE_SAMPLE_SPREAD = 0.2f;
 /// calibration is measuring, so folding them in would make it chase its own tail.
 float probe_z_at(const xy_pos_t &pos, uint8_t probe_count) {
     return probe_at_point(pos, PROBE_PT_NONE, 1, true, probe_count, ApplyToolCorrections::no, MAX_PROBE_SAMPLE_SPREAD);
+}
+
+/// Local change: wait for the loadcell to calm down after the pickup and clean, before the first
+/// probe. Straight after the hot purge and the cool-down to probing temperature the tool and the
+/// sensor are still heat-soaking, and on this machine that shows as load transients that trip the
+/// Z probe in mid-air for about a minute (measured 2026-09-28: probes with no hold gave 3 to 14
+/// mid-air trips, the same tool after a 60 s hold gave none). Watch the raw load in 3 s windows
+/// and go on once the window mean has stopped drifting for two windows in a row, with a floor and
+/// a ceiling on the wait. Every window is logged so the thresholds can be tuned from the log.
+static void settle_until_loadcell_calm(uint32_t min_ms, uint32_t max_ms) {
+    constexpr uint32_t window_ms = 3000;
+    constexpr float max_drift_g_per_s = 2.0f; // change of the window mean, window to window
+    constexpr float max_p2p_g = 250.0f; // peak-to-peak inside a window; the ~33 Hz coupling line alone is ~100 g
+    const float scale = loadcell.GetScale();
+    const uint32_t start = ticks_ms();
+    uint32_t window_start = start;
+    float win_min = INFINITY, win_max = -INFINITY, sum = 0.0f;
+    uint32_t n = 0;
+    float prev_mean = NAN;
+    uint8_t calm_windows = 0;
+
+    while (!gcode_exceptions().is_unwinding()) {
+        GcodeSuite::dwell(20);
+        const uint32_t now = ticks_ms();
+        const float g = scale * static_cast<float>(loadcell.get_raw_value());
+        win_min = std::min(win_min, g);
+        win_max = std::max(win_max, g);
+        sum += g;
+        ++n;
+
+        if (now - window_start >= window_ms) {
+            const float mean = sum / static_cast<float>(n);
+            const float p2p = win_max - win_min;
+            const float drift = std::isnan(prev_mean) ? INFINITY : std::abs(mean - prev_mean) / (window_ms / 1000.0f);
+            const bool calm = drift <= max_drift_g_per_s && p2p <= max_p2p_g;
+            calm_windows = calm ? static_cast<uint8_t>(calm_windows + 1) : 0;
+            SERIAL_ECHOLNPAIR("echo:tool offset: settle ", (now - start) / 1000, " s, load p2p ", p2p, " g, drift ", drift, calm ? " g/s (calm)" : " g/s");
+            if (calm_windows >= 2 && now - start >= min_ms) {
+                return;
+            }
+            prev_mean = mean;
+            win_min = INFINITY;
+            win_max = -INFINITY;
+            sum = 0.0f;
+            n = 0;
+            window_start = now;
+        }
+        if (now - start >= max_ms) {
+            SERIAL_ECHOLNPGM("echo:tool offset: settle ceiling reached, probing anyway");
+            return;
+        }
+    }
 }
 
 /// Park at nozzle cleaner and run the cleaning sequence.
@@ -731,10 +787,11 @@ bool run(uint8_t r_param, uint8_t probe_count, Context context, const ProgressCa
             // about a minute after pickup, which trip the Z probe in mid-air (retries walking down
             // from Z 35 to the bed). A short pause takes the worst of it away.
             if (context == Context::Print && measure_z && num_tools > 1) {
-                constexpr uint32_t settle_ms = 15000;
-                log_info(ToolOffsetCalib, "Tool %u: settling %u ms before probing", tool.to_raw(), static_cast<unsigned>(settle_ms));
+                constexpr uint32_t settle_min_ms = 20000;
+                constexpr uint32_t settle_max_ms = 75000;
+                log_info(ToolOffsetCalib, "Tool %u: settling until the loadcell is calm (%u..%u ms) before probing", tool.to_raw(), static_cast<unsigned>(settle_min_ms), static_cast<unsigned>(settle_max_ms));
                 SERIAL_ECHOLNPAIR("echo:tool offset: settle wait for tool ", tool.to_raw());
-                GcodeSuite::dwell(settle_ms);
+                settle_until_loadcell_calm(settle_min_ms, settle_max_ms);
                 if (gcode_exceptions().is_unwinding()) {
                     return false;
                 }

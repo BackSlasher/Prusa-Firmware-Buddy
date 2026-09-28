@@ -954,7 +954,13 @@ std::expected<float, const char *> probe_sensor_z(const tool_offset::ProbingConf
     for (uint8_t attempt = 1; attempt <= max_tries; ++attempt) {
         const float sensor_z = measure_sensor_true_z(z_probe_pos);
         if (std::isnan(sensor_z)) {
-            return std::unexpected("Initial probing failed, sensor Z is NaN");
+            // Every one of probe_here's attempts tripped in mid-air (a tool still ringing after its
+            // clean). That is exactly the case the settle-and-retry below exists for, so treat it
+            // like an implausible reading instead of failing the whole calibration at once.
+            SERIAL_ECHOLNPAIR("echo:sensor pad probe got no valid touch (try ", attempt, " of ", max_tries, "), settling and retrying");
+            do_blocking_move_to_z(z_probe_pos.z + config.safe_z_height);
+            GcodeSuite::dwell(5000);
+            continue;
         }
         uint32_t settle_ms = 1000;
         if (std::abs(sensor_z - z_probe_pos.z) > max_deviation_mm) {
@@ -974,7 +980,7 @@ std::expected<float, const char *> probe_sensor_z(const tool_offset::ProbingConf
         do_blocking_move_to_z(z_probe_pos.z + config.safe_z_height);
         GcodeSuite::dwell(settle_ms);
     }
-    return std::unexpected("Sensor Z did not settle (mid-air triggers?)");
+    return std::unexpected("Sensor Z did not settle (mid-air triggers?)"); // also: every try returned no touch
 }
 
 // The Cyphal data port that feeds a sensor channel.
