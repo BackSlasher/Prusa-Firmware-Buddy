@@ -144,8 +144,14 @@ void PrusaGcodeSuite::M865() {
         config_store().set_filament_type(VirtualToolIndex::from_raw(*load), filament_type);
     }
 
+    // Reported for every filament type, including none - whose name is "---".
+    // A host cannot tell which command an `ok` acknowledges, so it pairs answers with
+    // queries by order of arrival, which needs every query to yield exactly one answer.
+    // A slot answering with silence would shift all the following answers by one.
+    SERIAL_ECHOLNPAIR("name:", params.name.data());
+
+    // The zeroed parameters of an empty slot carry nothing worth reporting
     if (filament_type != FilamentType::none) {
-        SERIAL_ECHOLNPAIR("name:", params.name.data());
         SERIAL_ECHOLNPAIR("nozzle_temperature:", params.nozzle_temperature);
         SERIAL_ECHOLNPAIR("heatbed_temperature:", params.heatbed_temperature);
         SERIAL_ECHOLNPAIR("is_abrasive:", params.is_abrasive);
