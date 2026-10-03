@@ -104,6 +104,12 @@ public: // LEDs
     /// Sets PWM for the led strip that is under the bed
     void set_bed_leds_color(leds::ColorRGBW set);
 
+    /// Holds the bed LED strip dark while the loadcell is probing, its PWM disturbs the loadcell reading.
+    /// The color set by set_bed_leds_color() is kept and shown again some time after the hold is released.
+    /// Taking the hold blocks for a moment if the strip was lit, to let it actually go dark.
+    /// Called by Loadcell::HighPrecisionEnabler, the hold does not nest.
+    void set_bed_leds_dark_for_probing(bool set);
+
     /// Sets the white led strobe mode.
     ///
     /// * If set to nullopt, strobe mode is disabled. Led goes to shining
@@ -169,6 +175,13 @@ private:
 
 #if XBUDDY_EXTENSION_VARIANT_IS_STANDARD()
     leds::ColorRGBW bed_leds_color_;
+
+    /// \returns whether the bed LED strip is to be dark now; mutex_ must be held
+    bool bed_leds_dark() const;
+
+    bool bed_leds_dark_for_probing_ = false;
+    /// When the hold was last released, nullopt once the strip has been given back
+    std::optional<uint32_t> bed_leds_dark_released_ms_;
     std::optional<uint16_t> strobe_freq_ = std::nullopt;
 
     FanCooling chamber_cooling;

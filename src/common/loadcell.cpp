@@ -16,6 +16,10 @@
 #include "bsod.h"
 #include "config_features.h"
 #include <option/has_power_panic.h>
+#include <option/xbuddy_extension_variant.h>
+#if XBUDDY_EXTENSION_VARIANT_IS_STANDARD()
+    #include <feature/xbuddy_extension/xbuddy_extension.hpp>
+#endif
 #if HAS_POWER_PANIC()
     #include "power_panic.hpp"
 #endif // POWER_PANIC
@@ -476,6 +480,10 @@ Loadcell::HighPrecisionEnabler::HighPrecisionEnabler(Loadcell &lcell, bool enabl
         log_warning(Loadcell, "HighPrecisionEnabler: already enabled, not taking ownership");
         return;
     }
+#if XBUDDY_EXTENSION_VARIANT_IS_STANDARD()
+    // The bed LED strip disturbs the loadcell, have it dark before the filters are reset and primed
+    buddy::xbuddy_extension().set_bed_leds_dark_for_probing(true);
+#endif
     m_lcell.EnableHighPrecision();
     m_owns_high_precision = true;
 }
@@ -483,6 +491,9 @@ Loadcell::HighPrecisionEnabler::HighPrecisionEnabler(Loadcell &lcell, bool enabl
 Loadcell::HighPrecisionEnabler::~HighPrecisionEnabler() {
     if (m_owns_high_precision) {
         m_lcell.DisableHighPrecision();
+#if XBUDDY_EXTENSION_VARIANT_IS_STANDARD()
+        buddy::xbuddy_extension().set_bed_leds_dark_for_probing(false);
+#endif
     }
 }
 

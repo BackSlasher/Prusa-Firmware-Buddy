@@ -11,6 +11,7 @@
 #include <bsod/bsod.h>
 #include <fanctl/CFanCtl3Wire.hpp> // for FANCTL_START_TIMEOUT
 #include <utils/timing/rate_limiter.hpp>
+#include <cmsis_os.h>
 
 namespace {
 
@@ -18,6 +19,18 @@ namespace {
 //
 // This is a bit below 15%.
 constexpr uint8_t strobe_pwm = 35;
+
+// The PWM of the bed LED strip disturbs the loadcell. Measured on a CORE One with INDX: the raw
+// load is 218-242 g peak-to-peak with the strip lit and 142-158 g with it dark, while the probe
+// triggers at 50 g. So the strip is held dark while the loadcell is probing.
+//
+// How long to wait after asking for a dark strip before the loadcell is used: one puppy modbus
+// cycle and the extension board applying it.
+constexpr uint32_t bed_leds_dark_latency_ms = 100;
+
+// How long the strip stays dark after probing ended, so that it does not blink (and cost the
+// latency again) between probes that follow each other.
+constexpr uint32_t bed_leds_dark_holdoff_ms = 6000;
 
 // How long a bad RPM reading must persist before is_fan_ok reports failure.
 constexpr uint32_t fan_bad_timeout_ms = 750;
@@ -59,7 +72,8 @@ void XBuddyExtension::step() {
         return;
     }
 
-    puppies::xbuddy_extension.set_rgbw_led({ bed_leds_color_.r, bed_leds_color_.g, bed_leds_color_.b, bed_leds_color_.w });
+    const auto bed_leds = bed_leds_dark() ? leds::ColorRGBW() : bed_leds_color_;
+    puppies::xbuddy_extension.set_rgbw_led({ bed_leds.r, bed_leds.g, bed_leds.b, bed_leds.w });
     puppies::xbuddy_extension.set_white_led(chamber_leds_pwm);
     puppies::xbuddy_extension.set_white_strobe_frequency(strobe_freq_);
     puppies::xbuddy_extension.set_usb_power(config_store().xbe_usb_power.get());
@@ -297,6 +311,30 @@ leds::ColorRGBW XBuddyExtension::bed_leds_color() const {
 void XBuddyExtension::set_bed_leds_color(leds::ColorRGBW set) {
     std::lock_guard _lg(mutex_);
     bed_leds_color_ = set;
+}
+
+bool XBuddyExtension::bed_leds_dark() const {
+    return bed_leds_dark_for_probing_
+        || (bed_leds_dark_released_ms_.has_value() && ticks_ms() - *bed_leds_dark_released_ms_ < bed_leds_dark_holdoff_ms);
+}
+
+void XBuddyExtension::set_bed_leds_dark_for_probing(bool set) {
+    bool was_lit = false;
+    {
+        std::lock_guard _lg(mutex_);
+        if (set) {
+            was_lit = !bed_leds_dark();
+            // Do not wait for step(), it runs on the thread that is about to probe
+            puppies::xbuddy_extension.set_rgbw_led({ 0, 0, 0, 0 });
+            bed_leds_dark_released_ms_.reset();
+        } else {
+            bed_leds_dark_released_ms_ = ticks_ms();
+        }
+        bed_leds_dark_for_probing_ = set;
+    }
+    if (was_lit) {
+        osDelay(bed_leds_dark_latency_ms);
+    }
 }
 
 void XBuddyExtension::set_strobe(std::optional<uint16_t> freq) {
