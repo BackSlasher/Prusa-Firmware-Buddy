@@ -16,6 +16,7 @@ target_sources(
           M865.cpp
           M876.cpp
           M9140_M9150.cpp
+          M9162.cpp
           M9200.cpp
           M9201.cpp
           M9933.cpp

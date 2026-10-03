@@ -314,20 +314,33 @@ void XBuddyExtension::set_bed_leds_color(leds::ColorRGBW set) {
 }
 
 bool XBuddyExtension::bed_leds_dark() const {
+    if (!bed_leds_dark_for_probing_enabled_) {
+        return false;
+    }
     return bed_leds_dark_for_probing_
         || (bed_leds_dark_released_ms_.has_value() && ticks_ms() - *bed_leds_dark_released_ms_ < bed_leds_dark_holdoff_ms);
+}
+
+bool XBuddyExtension::bed_leds_dark_for_probing_enabled() const {
+    std::lock_guard _lg(mutex_);
+    return bed_leds_dark_for_probing_enabled_;
+}
+
+void XBuddyExtension::set_bed_leds_dark_for_probing_enabled(bool set) {
+    std::lock_guard _lg(mutex_);
+    bed_leds_dark_for_probing_enabled_ = set;
 }
 
 void XBuddyExtension::set_bed_leds_dark_for_probing(bool set) {
     bool was_lit = false;
     {
         std::lock_guard _lg(mutex_);
-        if (set) {
+        if (set && bed_leds_dark_for_probing_enabled_) {
             was_lit = !bed_leds_dark();
             // Do not wait for step(), it runs on the thread that is about to probe
             puppies::xbuddy_extension.set_rgbw_led({ 0, 0, 0, 0 });
             bed_leds_dark_released_ms_.reset();
-        } else {
+        } else if (!set) {
             bed_leds_dark_released_ms_ = ticks_ms();
         }
         bed_leds_dark_for_probing_ = set;

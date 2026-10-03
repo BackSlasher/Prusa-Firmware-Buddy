@@ -110,6 +110,10 @@ public: // LEDs
     /// Called by Loadcell::HighPrecisionEnabler, the hold does not nest.
     void set_bed_leds_dark_for_probing(bool set);
 
+    /// Whether set_bed_leds_dark_for_probing() does anything (it does by default); not persisted
+    bool bed_leds_dark_for_probing_enabled() const;
+    void set_bed_leds_dark_for_probing_enabled(bool set);
+
     /// Sets the white led strobe mode.
     ///
     /// * If set to nullopt, strobe mode is disabled. Led goes to shining
@@ -179,6 +183,7 @@ private:
     /// \returns whether the bed LED strip is to be dark now; mutex_ must be held
     bool bed_leds_dark() const;
 
+    bool bed_leds_dark_for_probing_enabled_ = true;
     bool bed_leds_dark_for_probing_ = false;
     /// When the hold was last released, nullopt once the strip has been given back
     std::optional<uint32_t> bed_leds_dark_released_ms_;

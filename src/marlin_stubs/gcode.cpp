@@ -23,6 +23,7 @@
 #include <option/has_indx.h>
 #include <option/has_heaters_selftest_gcode.h>
 #include <option/has_wastebin_fill_tracking.h>
+#include <option/xbuddy_extension_variant.h>
 
 #if HAS_LOADCELL()
     #include "loadcell.hpp"
@@ -369,6 +370,12 @@ bool GcodeSuite::process_parsed_command_custom(bool no_ok) {
         case 9150:
             PrusaGcodeSuite::M9150();
             break;
+
+#if XBUDDY_EXTENSION_VARIANT_IS_STANDARD()
+        case 9162:
+            PrusaGcodeSuite::M9162();
+            break;
+#endif
 
         case 9200:
             PrusaGcodeSuite::M9200();

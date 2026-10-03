@@ -10,6 +10,7 @@
 #include <option/has_esp.h>
 #include <option/has_toolchanger.h>
 #include <option/has_tool_mapping.h>
+#include <option/xbuddy_extension_variant.h>
 #include <option/has_side_leds.h>
 #include <option/has_manual_belt_tuning.h>
 #include <option/has_i2c_expander.h>
@@ -195,6 +196,10 @@ void M1987(); //< Heater selftest
 void M9140(); //< Set normal (non-stealth) mode
 void M9141(); //< Get stealth mode status
 void M9150(); //< Set stealth mode
+
+#if XBUDDY_EXTENSION_VARIANT_IS_STANDARD()
+void M9162(); //< Get/set whether the bed LED strip goes dark while the loadcell is probing
+#endif
 
 void M9200(); //< Re-load IS settings from config store
 void M9201(); //< Reset to default motion parameters (accelerations, feedrates, ...)
