@@ -10,6 +10,7 @@
 #include <logging/log.hpp>
 #include <marlin_server.hpp>
 #include <option/has_crash_detection.h>
+#include <option/has_serial_print.h>
 #include <option/has_selftest.h>
 #include <option/has_mmu2.h>
 
@@ -221,8 +222,18 @@ void FilamentSensors::process_events() {
         }
 
 #if HAS_CRASH_DETECTION()
-        if (crash_s.get_state() != Crash_s::PRINTING) {
-            // Only allow runouts in print and outside of crash recovery
+        // Only allow runouts in print and outside of crash recovery.
+        //
+        // A serial (host-driven) print never reaches Crash_s::PRINTING, because print_start
+        // leaves crash detection off for it ("Crash Detection is disabled during serial
+        // printing"). Without the exception below every runout on such a print was dropped
+        // here and the printer kept extruding air. A serial print also never enters crash
+        // recovery, so the gate has nothing to protect in that case.
+        if (crash_s.get_state() != Crash_s::PRINTING
+    #if HAS_SERIAL_PRINT()
+            && !marlin_server::is_serial_printing()
+    #endif
+        ) {
             return false;
         }
 #endif

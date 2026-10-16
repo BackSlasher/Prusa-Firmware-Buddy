@@ -99,6 +99,9 @@ void settings_reset();
 // Start serial print (issue when gcodes start comming via serial line)
 void serial_print_start();
 
+/// \returns whether a serial print is starting or active (until it is cleaned up back to idle)
+bool is_serial_printing();
+
 /// Finalize serial print (exit print state and clean up)
 /// this is meant to be gracefull print finish, called when print finishes sucessfully.
 void serial_print_finalize();

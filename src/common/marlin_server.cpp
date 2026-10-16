@@ -1512,6 +1512,10 @@ void serial_print_start() {
     server.print_state = State::SerialPrintInit;
     print_state = {};
 }
+
+bool is_serial_printing() {
+    return server.print_state == State::SerialPrintInit || server.print_is_serial;
+}
 #endif
 
 void print_start(const char *filename, const GCodeReaderPosition &resume_pos, PreviewSkipIfAble skip_preview, ResetToolMapping reset_tool_mapping) {
